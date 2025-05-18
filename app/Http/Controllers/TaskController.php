@@ -64,13 +64,25 @@ class TaskController extends Controller
         $ordering = $request->query('ordering');
 
         try {
-            if ($ordering === 'urgency') {
+            if ($ordering === '-is_urgent') {
+                // по убыванию срочности: просроченные → срочные → обычные → DONE
                 $query->orderByRaw("
         CASE
             WHEN status = 'DONE' THEN 4
             WHEN is_overdue = true THEN 1
             WHEN is_urgent = true THEN 2
             ELSE 3
+        END ASC
+    ");
+            } elseif ($ordering === 'is_urgent') {
+                // по возрастанию срочности: DONE → обычные → срочные → просроченные
+                $query->orderByRaw("
+        CASE
+            WHEN status = 'DONE' THEN 1
+            WHEN is_urgent = false AND is_overdue = false THEN 2
+            WHEN is_urgent = true THEN 3
+            WHEN is_overdue = true THEN 4
+            ELSE 5
         END ASC
     ");
             } elseif ($ordering) {

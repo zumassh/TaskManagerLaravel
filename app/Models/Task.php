@@ -54,26 +54,31 @@ class Task extends Model
 
     public function updateStatusFlags(): void
     {
-        $now = now();
+        $nowTs = now()->timestamp;
+        $deadlineTs = optional($this->deadline)->timestamp;
 
         $isOverdue = false;
         $isUrgent = false;
 
-        if ($this->deadline && $this->status !== 'DONE') {
-            if ($this->deadline->lt($now)) {
+        if ($deadlineTs && $this->status !== 'DONE') {
+            if ($deadlineTs < $nowTs) {
                 $isOverdue = true;
-            }
-
-            $diff = $this->deadline->diffInSeconds($now, false);
-            if ($diff >= 0 && $diff < 86400) {
+            } elseif (($deadlineTs - $nowTs) < 86400) {
                 $isUrgent = true;
             }
         }
 
         $this->forceFill([
-            'is_urgent' => $isUrgent,
             'is_overdue' => $isOverdue,
+            'is_urgent' => $isUrgent,
         ]);
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (Task $task) {
+            $task->updateStatusFlags();
+        });
     }
 
     public function user()
