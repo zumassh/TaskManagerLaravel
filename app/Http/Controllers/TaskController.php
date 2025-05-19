@@ -10,7 +10,7 @@ use Eluceo\iCal\Domain\Entity\Event;
 use Eluceo\iCal\Domain\ValueObject\DateTime as ICalDateTime;
 use Eluceo\iCal\Presentation\Factory\CalendarFactory;
 use Symfony\Component\HttpFoundation\Response;
-use Laravel\Sanctum\PersonalAccessToken;
+use Illuminate\Support\Arr;
 
 class TaskController extends Controller
 {
@@ -44,20 +44,32 @@ class TaskController extends Controller
         $this->resolveAuth($request);
         $query = Task::query()->where('user_id', Auth::id());
 
-        if ($priority = $request->query('priority')) {
-            $query->where('priority', $priority);
+        $isUrgent = $request->boolean('is_urgent', false);
+        $isOverdue = $request->boolean('is_overdue', false);
+
+        if ($isUrgent && $isOverdue) {
+            $query->where(function ($q) {
+                $q->where('is_urgent', true)
+                    ->orWhere('is_overdue', true);
+            });
+        } elseif ($isUrgent) {
+            $query->where('is_urgent', true);
+        } elseif ($isOverdue) {
+            $query->where('is_overdue', true);
         }
 
-        if ($status = $request->query('status')) {
-            $query->where('status', $status);
+        if ($request->has('priority')) {
+            $priorities = Arr::wrap($request->query('priority'));
+            if (!empty($priorities)) {
+                $query->whereIn('priority', $priorities);
+            }
         }
 
-        if ($request->has('is_urgent')) {
-            $query->where('is_urgent', filter_var($request->query('is_urgent'), FILTER_VALIDATE_BOOLEAN));
-        }
-
-        if ($request->has('is_overdue')) {
-            $query->where('is_overdue', filter_var($request->query('is_overdue'), FILTER_VALIDATE_BOOLEAN));
+        if ($request->has('status')) {
+            $priorities = Arr::wrap($request->query('status'));
+            if (!empty($priorities)) {
+                $query->whereIn('status', $priorities);
+            }
         }
 
         $sortable = ['priority', 'status', 'deadline', 'is_urgent', 'is_overdue'];
@@ -65,26 +77,24 @@ class TaskController extends Controller
 
         try {
             if ($ordering === '-is_urgent') {
-                // по убыванию срочности: просроченные → срочные → обычные → DONE
                 $query->orderByRaw("
-        CASE
-            WHEN status = 'DONE' THEN 4
-            WHEN is_overdue = true THEN 1
-            WHEN is_urgent = true THEN 2
-            ELSE 3
-        END ASC
-    ");
+                CASE
+                    WHEN status = 'DONE' THEN 4
+                    WHEN is_overdue = true THEN 1
+                    WHEN is_urgent = true THEN 2
+                    ELSE 3
+                END ASC
+            ");
             } elseif ($ordering === 'is_urgent') {
-                // по возрастанию срочности: DONE → обычные → срочные → просроченные
                 $query->orderByRaw("
-        CASE
-            WHEN status = 'DONE' THEN 1
-            WHEN is_urgent = false AND is_overdue = false THEN 2
-            WHEN is_urgent = true THEN 3
-            WHEN is_overdue = true THEN 4
-            ELSE 5
-        END ASC
-    ");
+                CASE
+                    WHEN status = 'DONE' THEN 1
+                    WHEN is_urgent = false AND is_overdue = false THEN 2
+                    WHEN is_urgent = true THEN 3
+                    WHEN is_overdue = true THEN 4
+                    ELSE 5
+                END ASC
+            ");
             } elseif ($ordering) {
                 $direction = 'asc';
                 $column = $ordering;
