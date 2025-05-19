@@ -117,6 +117,11 @@ class TaskController extends Controller
     public function store(Request $request)
     {
         $this->resolveAuth($request);
+        if ($request->filled('deadline')) {
+            $request->merge([
+                'deadline' => Carbon::parse($request->input('deadline'), 'Europe/Moscow')->timezone('UTC')
+            ]);
+        }
         $data = $request->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
@@ -141,6 +146,12 @@ class TaskController extends Controller
     {
         $this->resolveAuth($request);
         $this->authorizeTask($task);
+
+        if ($request->filled('deadline')) {
+            $request->merge([
+                'deadline' => Carbon::parse($request->input('deadline'), 'Europe/Moscow')->timezone('UTC')
+            ]);
+        }
 
         $data = $request->validate([
             'title' => 'sometimes|required|string|max:255',
@@ -210,7 +221,15 @@ class TaskController extends Controller
 
     protected function decorateTask(Task $task): array
     {
-        return $task->toArray();
+        $deadline = $task->deadline
+            ? $task->deadline->copy()->timezone('Europe/Moscow')->toDateTimeString()
+            : null;
+
+        return array_merge($task->toArray(), [
+            'deadline' => $deadline,
+            'is_overdue' => $task->is_overdue,
+            'is_urgent' => $task->is_urgent,
+        ]);
     }
 
 }
